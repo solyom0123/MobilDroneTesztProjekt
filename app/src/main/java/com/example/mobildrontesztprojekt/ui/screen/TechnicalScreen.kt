@@ -239,7 +239,7 @@ private fun DronesTab(vm: TechnicalViewModel) {
             onDismiss = { showAddDialog = false; editTarget = null },
             onSave = { d -> if (editTarget == null) vm.insertDrone(d) else vm.updateDrone(d); showAddDialog = false; editTarget = null })
     }
-    deleteTarget?.let { ConfirmDeleteDialog(it.name, { vm.deleteDrone(it); deleteTarget = null }, { deleteTarget = null }) }
+    deleteTarget?.let { ConfirmDeleteDialog(it.name, onConfirm = { vm.deleteDrone(it); deleteTarget = null }, onDismiss = { deleteTarget = null }) }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -332,7 +332,7 @@ private fun UWBNodesTab(vm: TechnicalViewModel) {
             onDismiss = { showDialog = false; editTarget = null },
             onSave = { n -> if (editTarget == null) vm.insertUWBNode(n) else vm.updateUWBNode(n); showDialog = false; editTarget = null })
     }
-    deleteTarget?.let { ConfirmDeleteDialog(it.name, { vm.deleteUWBNode(it); deleteTarget = null }, { deleteTarget = null }) }
+    deleteTarget?.let { ConfirmDeleteDialog(it.name, onConfirm = { vm.deleteUWBNode(it); deleteTarget = null }, onDismiss = { deleteTarget = null }) }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -428,13 +428,13 @@ private fun TStatusBadge(label: String, color: Color) {
 @Composable
 private fun TField(label: String, value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(value = value, onValueChange = onValueChange, label = { Text(label) },
-        modifier = Modifier.fillMaxWidth(), singleLine = true, colors = fieldColors())
+        modifier = Modifier.fillMaxWidth(), singleLine = true, colors = droneFieldColors())
 }
 
 @Composable
 private fun TNumField(label: String, value: String, modifier: Modifier = Modifier, onValueChange: (String) -> Unit) {
     OutlinedTextField(value = value, onValueChange = onValueChange, label = { Text(label) },
-        modifier = modifier.fillMaxWidth(), singleLine = true, colors = fieldColors())
+        modifier = modifier.fillMaxWidth(), singleLine = true, colors = droneFieldColors())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -443,7 +443,7 @@ private fun TDropdownField(label: String, value: String, expanded: Boolean, onEx
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onExpandedChange) {
         OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(), colors = fieldColors())
+            modifier = Modifier.menuAnchor().fillMaxWidth(), colors = droneFieldColors())
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }, content = content)
     }
 }
@@ -550,7 +550,7 @@ private fun AppKeyCard(
                         )
                     }
                 },
-                colors = fieldColors()
+                colors = droneFieldColors()
             )
 
             if (sdkError != null) {
@@ -632,7 +632,7 @@ private fun DronePickerCard(
                     trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                     enabled       = sdkReady,
                     modifier      = Modifier.menuAnchor().fillMaxWidth(),
-                    colors        = fieldColors()
+                    colors        = droneFieldColors()
                 )
                 ExposedDropdownMenu(
                     expanded         = expanded,
@@ -690,7 +690,7 @@ private fun DroneOfflineCard(droneName: String) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Filled.FlightOff, null, tint = DroneError, modifier = Modifier.size(48.dp))
+            Icon(Icons.Filled.FlightLand, null, tint = DroneError, modifier = Modifier.size(48.dp))
             Text(
                 "$droneName",
                 fontWeight = FontWeight.Bold,
@@ -939,22 +939,9 @@ private fun TelemetryItem(label: String, value: String, icon: androidx.compose.u
     }
 }
 
-// ─── ConfirmDeleteDialog (meglévő kódban is használt) ────────────────────────
-
-@Composable
-private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Törlés megerősítése") },
-        text  = { Text("Biztosan törlöd: $name?") },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Törlés", color = DroneError) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Mégsem") } }
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun droneFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor   = DroneSecondary,
     unfocusedBorderColor = DroneOnSurface.copy(alpha = 0.3f),
     focusedLabelColor    = DroneSecondary,

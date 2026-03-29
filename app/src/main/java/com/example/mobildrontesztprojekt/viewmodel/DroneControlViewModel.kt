@@ -6,7 +6,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mobildrontesztprojekt.data.database.AppDatabase
 import com.example.mobildrontesztprojekt.data.entity.AppKey
-import com.example.mobildrontesztprojekt.data.entity.Drone
 import dji.sdk.keyvalue.key.FlightControllerKey
 import dji.sdk.keyvalue.key.KeyTools
 import dji.sdk.keyvalue.value.common.ComponentIndexType
@@ -14,11 +13,12 @@ import dji.v5.common.callback.CommonCallbacks
 import dji.v5.common.error.IDJIError
 import dji.v5.manager.SDKManager
 import dji.v5.manager.aircraft.virtualstick.VirtualStickManager
-import dji.v5.manager.aircraft.virtualstick.VirtualStickState
-import dji.v5.manager.aircraft.virtualstick.VirtualStickStateListener
 import dji.v5.manager.interfaces.IVirtualStickManager
 import dji.v5.manager.KeyManager
-import dji.v5.manager.aircraft.camera.CameraStreamManager
+import dji.v5.manager.datacenter.camera.CameraStreamManager
+import dji.v5.manager.interfaces.ICameraStreamManager
+import dji.v5.manager.interfaces.SDKManagerCallback
+import dji.v5.common.register.DJISDKInitEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -120,10 +120,11 @@ class DroneControlViewModel(application: Application) : AndroidViewModel(applica
         _sdkState.value = SdkRegisterState.REGISTERING
         _sdkError.value = null
 
+        // FIX: SDKManager.getInstance().init() in MSDK V5 takes only (Context, SDKManagerCallback).
+        // The App Key is declared in AndroidManifest.xml as a <meta-data> tag, not passed here.
         SDKManager.getInstance().init(
             getApplication(),
-            appKey,
-            object : SDKManager.SDKManagerCallback {
+            object : SDKManagerCallback {
                 override fun onRegisterSuccess() {
                     Log.d(TAG, "SDK regisztráció sikeres")
                     _sdkState.value = SdkRegisterState.SUCCESS
@@ -152,10 +153,29 @@ class DroneControlViewModel(application: Application) : AndroidViewModel(applica
                 }
 
                 override fun onProductChanged(productId: Int) {}
-                override fun onInitProcess(event: dji.v5.manager.SDKManager.InitEvent?, totalProcess: Int) {}
+
+                // FIX: InitEvent lives in dji.v5.manager.SDKManager.InitEvent – use the
+                // fully-qualified nested type so the compiler can resolve it.
+                override fun onInitProcess(event: DJISDKInitEvent?, totalProcess: Int) {}
+
                 override fun onDatabaseDownloadProgress(current: Long, total: Long) {}
             }
         )
+
+        // FIX: The App Key cannot be injected at runtime via init().
+        // You must add it to AndroidManifest.xml inside <application>:
+        //
+        //   <meta-data
+        //       android:name="com.dji.sdk.API_KEY"
+        //       android:value="YOUR_APP_KEY_HERE" />
+        //
+        // If you need to support multiple / user-supplied keys you would need to
+        // restart the process after writing the new key to SharedPreferences and
+        // reading it in a custom Application.onCreate() before calling init().
+        //
+        // For now, saveAndRegisterKey() saves the key to the Room database so the
+        // user can see which key is active, and calls init() to start the SDK.
+        // The key that is actually used by MSDK is the one in the manifest.
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -240,7 +260,7 @@ class DroneControlViewModel(application: Application) : AndroidViewModel(applica
     /**
      * Joystick értékek frissítése.
      * Az értékeket a UI küldi, -1.0..+1.0 tartományban.
-     * Az SDK a tényleges parancssá skálázza (max 15 m/s, 100°/s stb.).
+     * Az SDK a tényleges paranccsá skálázza (max 15 m/s, 100°/s stb.).
      */
     fun updateLeftStick(vertical: Float, horizontal: Float) {
         _throttle.value = vertical.coerceIn(-1f, 1f)
@@ -284,17 +304,19 @@ class DroneControlViewModel(application: Application) : AndroidViewModel(applica
      */
     fun startCameraStream(textureView: android.view.TextureView) {
         if (!_cameraAvailable.value) return
-        CameraStreamManager.getInstance().addCameraStreamListener(
+        val surface = android.view.Surface(textureView.surfaceTexture ?: return)
+        CameraStreamManager.getInstance().putCameraStreamSurface(
             ComponentIndexType.LEFT_OR_MAIN,
-            textureView
+            surface,
+            textureView.width,
+            textureView.height,
+            ICameraStreamManager.ScaleType.CENTER_INSIDE
         )
     }
 
     fun stopCameraStream(textureView: android.view.TextureView) {
-        CameraStreamManager.getInstance().removeCameraStreamListener(
-            ComponentIndexType.LEFT_OR_MAIN,
-            textureView
-        )
+        val surface = android.view.Surface(textureView.surfaceTexture ?: return)
+        CameraStreamManager.getInstance().removeCameraStreamSurface(surface)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
