@@ -34,7 +34,7 @@
         android:theme="@style/Theme.MobilDronTesztProjekt">
         <meta-data
             android:name="com.dji.sdk.API_KEY"
-            android:value="YOUR_APP_KEY_HERE" />
+            android:value="9c7681723272dd493127f868" />
         <uses-library android:name="com.android.future.usb.accessory" android:required="false" />
         <uses-library android:name="org.apache.http.legacy" android:required="false" />
 

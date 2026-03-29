@@ -13,7 +13,6 @@ android {
 
     defaultConfig {
         multiDexEnabled = true
-        applicationId = "hu.dronventory.droneuwb"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
