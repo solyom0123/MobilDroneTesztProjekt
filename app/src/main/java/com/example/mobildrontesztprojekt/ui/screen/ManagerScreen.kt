@@ -150,6 +150,7 @@ private fun CorridorsTab(vm: ManagerViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CorridorDialog(initial: Corridor?, warehouseId: Long, onDismiss: () -> Unit, onSave: (Corridor) -> Unit) {
     var name    by remember { mutableStateOf(initial?.name ?: "") }
@@ -389,6 +390,7 @@ private fun InventoryTab(vm: ManagerViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InventoryDialog(initial: InventoryItem?, warehouseId: Long, onDismiss: () -> Unit, onSave: (InventoryItem) -> Unit) {
     var name     by remember { mutableStateOf(initial?.name ?: "") }
@@ -450,7 +452,9 @@ private fun JobsTab(vm: ManagerViewModel) {
                 val drone = drones.find { it.id == job.droneId }
                 val user  = users.find { it.id == job.assignedUserId }
                 val isExp = expandedJobId == job.id
-                val jobItems by vm.getJobItems(job.id).collectAsStateWithLifecycle(emptyList())
+                val jobItems by remember(job.id) {
+                    vm.getJobItems(job.id)
+                }.collectAsStateWithLifecycle(emptyList())
                 JobCard(job, drone, user, isExp, jobItems, allItems,
                     { expandedJobId = if (isExp) null else job.id },
                     { editTarget = job; showDialog = true }, { deleteTarget = job },
@@ -462,6 +466,7 @@ private fun JobsTab(vm: ManagerViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun JobCard(
     job: Job, drone: Drone?, user: User?, isExpanded: Boolean,
@@ -611,7 +616,7 @@ private fun DropdownField(label: String, value: String, expanded: Boolean, onExp
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onExpandedChange) {
         OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(), colors = fieldColors())
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = fieldColors())
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }, content = content)
     }
 }
@@ -625,8 +630,6 @@ private fun WarehousePicker(warehouses: List<Warehouse>, selected: Warehouse?, e
         }
     }
 }
-
-private fun <T> CrudList(items: List<T>, keyFn: (T) -> Any, fab: () -> Unit, itemContent: @Composable (T) -> Unit) {}
 
 @Composable
 private fun <T> CrudList(

@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mobildrontesztprojekt.data.entity.Company
@@ -25,6 +25,7 @@ import com.example.mobildrontesztprojekt.data.entity.User
 import com.example.mobildrontesztprojekt.data.entity.UserRole
 import com.example.mobildrontesztprojekt.ui.theme.*
 import com.example.mobildrontesztprojekt.viewmodel.AdminViewModel
+import androidx.compose.ui.text.input.KeyboardType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -356,6 +357,19 @@ internal fun DField(label: String, value: String, onValueChange: (String) -> Uni
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        colors = fieldColors()
+    )
+}
+
+@Composable
+fun NumField(label: String, value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { if (it.isEmpty() || it.matches(Regex("-?\\d*\\.?\\d*"))) onChange(it) },
+        label = { Text(label) },
+        modifier = modifier.fillMaxWidth(),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = fieldColors()
     )
 }
