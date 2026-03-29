@@ -162,7 +162,12 @@ class DroneControlViewModel(application: Application) : AndroidViewModel(applica
 
                 // FIX: InitEvent lives in dji.v5.manager.SDKManager.InitEvent – use the
                 // fully-qualified nested type so the compiler can resolve it.
-                override fun onInitProcess(event: DJISDKInitEvent?, totalProcess: Int) {}
+                override fun onInitProcess(event: DJISDKInitEvent?, totalProcess: Int) {
+                    if (event == DJISDKInitEvent.INITIALIZE_COMPLETE) {
+                        // EZ HIÁNYOZHAT NÁLAD:
+                        SDKManager.getInstance().registerApp()
+                    }
+                }
 
                 override fun onDatabaseDownloadProgress(current: Long, total: Long) {}
             }
