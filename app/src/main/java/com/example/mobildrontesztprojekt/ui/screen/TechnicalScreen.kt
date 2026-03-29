@@ -553,18 +553,19 @@ private fun AppKeyCard(
                 colors = droneFieldColors()
             )
 
-            if (sdkError != null) {
+            if (!sdkError.isNullOrBlank()){
                 Text(
                     "Hiba: $sdkError",
                     color = DroneError,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick  = { onSave(inputKey) },
-                    enabled  = inputKey.isNotBlank() && sdkState != SdkRegisterState.REGISTERING,
+                    onClick = { onSave(inputKey.trim()) }, // Mindig vágd le a véletlen szóközöket!
+                    enabled = inputKey.isNotBlank() && sdkState != SdkRegisterState.REGISTERING,
                     modifier = Modifier.weight(1f),
                     colors   = ButtonDefaults.buttonColors(containerColor = DronePrimary)
                 ) {
