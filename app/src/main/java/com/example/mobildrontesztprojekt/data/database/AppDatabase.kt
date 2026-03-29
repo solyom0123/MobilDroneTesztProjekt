@@ -8,6 +8,8 @@ import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.mobildrontesztprojekt.data.dao.*
 import com.example.mobildrontesztprojekt.data.entity.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase as SQLiteDB
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,9 +21,10 @@ import java.security.MessageDigest
         Corridor::class, ShelfRow::class,
         ShelfLocation::class, InventoryItem::class,
         UWBNode::class, Drone::class,
-        Job::class, JobItem::class
+        Job::class, JobItem::class,
+        AppKey::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -37,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun uwbNodeDao(): UWBNodeDao
     abstract fun droneDao(): DroneDao
     abstract fun jobDao(): JobDao
+    abstract fun appKeyDao(): AppKeyDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -48,10 +52,19 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "drontech.db"
                 )
+                    .addMigrations(MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .addCallback(SeedCallback())
                     .build()
                     .also { INSTANCE = it }
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SQLiteDB) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `app_key` (`id` INTEGER NOT NULL, `djiAppKey` TEXT NOT NULL, PRIMARY KEY(`id`))"
+                )
             }
         }
 

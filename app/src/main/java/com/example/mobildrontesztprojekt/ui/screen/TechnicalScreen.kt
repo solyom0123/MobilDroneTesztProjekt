@@ -1,9 +1,13 @@
 package com.example.mobildrontesztprojekt.ui.screen
 
+import android.view.TextureView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,21 +16,34 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mobildrontesztprojekt.data.entity.*
 import com.example.mobildrontesztprojekt.ui.theme.*
+import com.example.mobildrontesztprojekt.viewmodel.DroneControlViewModel
+import com.example.mobildrontesztprojekt.viewmodel.DroneConnectionState
+import com.example.mobildrontesztprojekt.viewmodel.SdkRegisterState
 import com.example.mobildrontesztprojekt.viewmodel.TechnicalViewModel
+import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TechnicalScreen(onBack: () -> Unit) {
     val vm: TechnicalViewModel = viewModel()
+    val controlVm: DroneControlViewModel = viewModel()
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Polc méretek", "Termék méretek", "Dronok", "Csomópontok")
+    val tabs = listOf("Polc méretek", "Termék méretek", "Dronok", "Csomópontok", "Vezérlés")
 
     Scaffold(
         topBar = {
@@ -47,6 +64,7 @@ fun TechnicalScreen(onBack: () -> Unit) {
                 1 -> ProductSizesTab(vm)
                 2 -> DronesTab(vm)
                 3 -> UWBNodesTab(vm)
+                4 -> DroneControlTab(controlVm, vm)
             }
         }
     }
@@ -429,5 +447,518 @@ private fun TDropdownField(label: String, value: String, expanded: Boolean, onEx
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }, content = content)
     }
 }
+
+// ─── DRÓN VEZÉRLÉS TAB ────────────────────────────────────────────────────────
+
+@Composable
+fun DroneControlTab(controlVm: DroneControlViewModel, techVm: TechnicalViewModel) {
+    val savedKey     by controlVm.savedAppKey.collectAsStateWithLifecycle(null)
+    val sdkState     by controlVm.sdkState.collectAsStateWithLifecycle()
+    val sdkError     by controlVm.sdkError.collectAsStateWithLifecycle()
+    val connState    by controlVm.connectionState.collectAsStateWithLifecycle()
+    val drones       by techVm.drones.collectAsStateWithLifecycle(emptyList())
+
+    var selectedDrone by remember { mutableStateOf<Drone?>(null) }
+
+    val droneAvailable = connState == DroneConnectionState.CONNECTED
+    val sdkReady       = sdkState == SdkRegisterState.SUCCESS
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+
+        // ── 1. DJI App Key kártya ────────────────────────────────────────────
+        AppKeyCard(
+            savedKey   = savedKey?.djiAppKey,
+            sdkState   = sdkState,
+            sdkError   = sdkError,
+            onSave     = { controlVm.saveAndRegisterKey(it) },
+            onClear    = { controlVm.clearAppKey() }
+        )
+
+        // ── 2. Drón kiválasztás ──────────────────────────────────────────────
+        DronePickerCard(
+            drones        = drones,
+            selected      = selectedDrone,
+            sdkReady      = sdkReady,
+            droneAvailable = droneAvailable,
+            onSelect      = { selectedDrone = it }
+        )
+
+        // ── 3. Vezérlő + kamera panel (csak ha drón és SDK kész) ────────────
+        if (selectedDrone != null && sdkReady) {
+            if (droneAvailable) {
+                DroneFlightPanel(controlVm = controlVm)
+            } else {
+                DroneOfflineCard(droneName = selectedDrone!!.name)
+            }
+        }
+    }
+}
+
+// ─── App Key kártya ──────────────────────────────────────────────────────────
+
+@Composable
+private fun AppKeyCard(
+    savedKey : String?,
+    sdkState : SdkRegisterState,
+    sdkError : String?,
+    onSave   : (String) -> Unit,
+    onClear  : () -> Unit
+) {
+    var inputKey    by remember { mutableStateOf(savedKey ?: "") }
+    var showKey     by remember { mutableStateOf(false) }
+
+    LaunchedEffect(savedKey) { if (savedKey != null) inputKey = savedKey }
+
+    Card(
+        shape  = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DroneSurface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Key, null, tint = DroneAccent)
+                Spacer(Modifier.width(8.dp))
+                Text("DJI App Key", fontWeight = FontWeight.Bold, color = DroneOnSurface)
+                Spacer(Modifier.weight(1f))
+                // SDK állapot badge
+                val (label, color) = when (sdkState) {
+                    SdkRegisterState.IDLE        -> "Nincs regisztrálva" to DroneOnSurface.copy(0.4f)
+                    SdkRegisterState.REGISTERING -> "Regisztrálás…" to DroneWarning
+                    SdkRegisterState.SUCCESS     -> "SDK kész ✓" to DroneSuccess
+                    SdkRegisterState.FAILED      -> "Hiba ✗" to DroneError
+                }
+                TStatusBadge(label, color)
+            }
+
+            OutlinedTextField(
+                value         = inputKey,
+                onValueChange = { inputKey = it },
+                label         = { Text("App Key") },
+                modifier      = Modifier.fillMaxWidth(),
+                singleLine    = true,
+                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon  = {
+                    IconButton(onClick = { showKey = !showKey }) {
+                        Icon(
+                            if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            null, tint = DroneSecondary
+                        )
+                    }
+                },
+                colors = fieldColors()
+            )
+
+            if (sdkError != null) {
+                Text(
+                    "Hiba: $sdkError",
+                    color = DroneError,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick  = { onSave(inputKey) },
+                    enabled  = inputKey.isNotBlank() && sdkState != SdkRegisterState.REGISTERING,
+                    modifier = Modifier.weight(1f),
+                    colors   = ButtonDefaults.buttonColors(containerColor = DronePrimary)
+                ) {
+                    Icon(Icons.Filled.Save, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Mentés & Aktiválás")
+                }
+                if (savedKey != null) {
+                    OutlinedButton(onClick = onClear) {
+                        Text("Törlés", color = DroneError)
+                    }
+                }
+            }
+
+            if (sdkState == SdkRegisterState.IDLE && savedKey == null) {
+                Text(
+                    "⚠ DJI App Key nélkül a drónvezérlés nem elérhető.\nRegisztrálj a developer.dji.com oldalon.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DroneWarning
+                )
+            }
+        }
+    }
+}
+
+// ─── Drón kiválasztó kártya ───────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DronePickerCard(
+    drones         : List<Drone>,
+    selected       : Drone?,
+    sdkReady       : Boolean,
+    droneAvailable : Boolean,
+    onSelect       : (Drone) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        shape  = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DroneSurface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Flight, null, tint = DroneSecondary)
+                Spacer(Modifier.width(8.dp))
+                Text("Drón kiválasztása", fontWeight = FontWeight.Bold, color = DroneOnSurface)
+                Spacer(Modifier.weight(1f))
+                if (droneAvailable && selected != null) {
+                    TStatusBadge("ELÉRHETŐ", DroneSuccess)
+                } else if (selected != null) {
+                    TStatusBadge("NEM ELÉRHETŐ", DroneError)
+                }
+            }
+
+            ExposedDropdownMenuBox(
+                expanded          = expanded && sdkReady,
+                onExpandedChange  = { if (sdkReady) expanded = it }
+            ) {
+                OutlinedTextField(
+                    value         = selected?.let { "${it.name}  (${it.model})" } ?: "Válassz drónт…",
+                    onValueChange = {},
+                    readOnly      = true,
+                    label         = { Text("Drón") },
+                    trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                    enabled       = sdkReady,
+                    modifier      = Modifier.menuAnchor().fillMaxWidth(),
+                    colors        = fieldColors()
+                )
+                ExposedDropdownMenu(
+                    expanded         = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    drones.forEach { d ->
+                        val (statusLabel, statusColor) = when (d.status) {
+                            DroneStatus.IDLE        -> "SZABAD"        to DroneSuccess
+                            DroneStatus.ACTIVE      -> "AKTÍV"         to DroneSecondary
+                            DroneStatus.CHARGING    -> "TÖLTÉS"        to DroneWarning
+                            DroneStatus.MAINTENANCE -> "KARBANTARTÁS"  to DroneError
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Filled.Flight, null, tint = statusColor, modifier = Modifier.size(16.dp))
+                                    Column {
+                                        Text(d.name, fontWeight = FontWeight.SemiBold)
+                                        Text(d.model, style = MaterialTheme.typography.bodySmall, color = DroneOnSurface.copy(0.6f))
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    TStatusBadge(statusLabel, statusColor)
+                                }
+                            },
+                            onClick = { onSelect(d); expanded = false }
+                        )
+                    }
+                }
+            }
+
+            if (!sdkReady) {
+                Text(
+                    "⚠ Add meg és aktiváld a DJI App Key-t a drón kiválasztásához.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DroneWarning
+                )
+            }
+        }
+    }
+}
+
+// ─── Drón offline kártya ──────────────────────────────────────────────────────
+
+@Composable
+private fun DroneOfflineCard(droneName: String) {
+    Card(
+        shape  = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DroneSurface)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(Icons.Filled.FlightOff, null, tint = DroneError, modifier = Modifier.size(48.dp))
+            Text(
+                "$droneName",
+                fontWeight = FontWeight.Bold,
+                color = DroneOnSurface,
+                fontSize = 18.sp
+            )
+            Text(
+                "A drón jelenleg nem elérhető.\nEllenőrizd a DJI RC kapcsolatot és a drón bekapcsolt állapotát.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = DroneOnSurface.copy(0.7f),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+// ─── Drón repülési panel ──────────────────────────────────────────────────────
+
+@Composable
+private fun DroneFlightPanel(controlVm: DroneControlViewModel) {
+    val vsEnabled  by controlVm.virtualStickEnabled.collectAsStateWithLifecycle()
+    val flightData by controlVm.flightData.collectAsStateWithLifecycle()
+    val camAvail   by controlVm.cameraAvailable.collectAsStateWithLifecycle()
+
+    // ── Telemetria kártya ────────────────────────────────────────────────────
+    Card(
+        shape  = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DroneSurface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Analytics, null, tint = DroneAccent)
+                Spacer(Modifier.width(8.dp))
+                Text("Telemetria", fontWeight = FontWeight.Bold, color = DroneOnSurface)
+                Spacer(Modifier.weight(1f))
+                TStatusBadge(if (flightData.isFlying) "REPÜL" else "FÖLDÖN",
+                    if (flightData.isFlying) DroneSuccess else DroneSecondary)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                TelemetryItem("Magasság", "%.1f m".format(flightData.altitudeM), Icons.Filled.Height)
+                TelemetryItem("Sebesség", "%.1f m/s".format(flightData.speedMs),   Icons.Filled.Speed)
+                TelemetryItem("Akksi",    "${flightData.batteryPercent}%",          Icons.Filled.BatteryFull)
+            }
+        }
+    }
+
+    // ── Kamera nézet ─────────────────────────────────────────────────────────
+    Card(
+        shape  = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Black)
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (camAvail) {
+                // TextureView-t AndroidView segítségével integráljuk
+                val textureViewRef = remember { mutableStateOf<TextureView?>(null) }
+                AndroidView(
+                    factory = { ctx ->
+                        TextureView(ctx).also { tv ->
+                            textureViewRef.value = tv
+                            controlVm.startCameraStream(tv)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    onRelease = { tv -> controlVm.stopCameraStream(tv) }
+                )
+                // Kamera overlay – élő felirat
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("● ÉLŐKÉP", color = DroneError, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.VideocamOff, null, tint = Color.Gray, modifier = Modifier.size(40.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Kamera nem elérhető", color = Color.Gray)
+                }
+            }
+        }
+    }
+
+    // ── Virtual Stick kapcsoló ────────────────────────────────────────────────
+    Card(
+        shape  = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DroneSurface)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.SportsEsports, null, tint = DroneSecondary)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Manuális vezérlés", fontWeight = FontWeight.SemiBold, color = DroneOnSurface)
+                Text(
+                    if (vsEnabled) "Virtual Stick aktív – joystickkel vezérelheted a drónт" else "Engedélyezd a manuális vezérlés előtt",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DroneOnSurface.copy(0.6f)
+                )
+            }
+            Switch(
+                checked  = vsEnabled,
+                onCheckedChange = { if (it) controlVm.enableVirtualStick() else controlVm.disableVirtualStick() },
+                colors   = SwitchDefaults.colors(checkedThumbColor = DroneSuccess, checkedTrackColor = DroneSuccess.copy(0.4f))
+            )
+        }
+    }
+
+    // ── Joystick vezérlők ─────────────────────────────────────────────────────
+    if (vsEnabled) {
+        Card(
+            shape  = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = DroneSurface)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    "Joystick",
+                    fontWeight = FontWeight.Bold,
+                    color = DroneOnSurface,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Row(
+                    Modifier.fillMaxWidth().height(180.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Bal stick – Throttle (fel/le) + Yaw (forgás)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Gáz / Forgás", style = MaterialTheme.typography.labelSmall, color = DroneOnSurface.copy(0.6f))
+                        Spacer(Modifier.height(4.dp))
+                        JoystickWidget(
+                            onStickMove = { dx, dy -> controlVm.updateLeftStick(-dy, dx) },
+                            onRelease   = { controlVm.centerSticks() }
+                        )
+                    }
+                    // Jobb stick – Pitch (előre/hátra) + Roll (oldalt)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Előre / Oldalt", style = MaterialTheme.typography.labelSmall, color = DroneOnSurface.copy(0.6f))
+                        Spacer(Modifier.height(4.dp))
+                        JoystickWidget(
+                            onStickMove = { dx, dy -> controlVm.updateRightStick(-dy, dx) },
+                            onRelease   = { controlVm.centerSticks() }
+                        )
+                    }
+                }
+                Text(
+                    "Bal: gáz (fel/le) + forgás  |  Jobb: előre/hátra + oldalsó mozgás",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = DroneOnSurface.copy(0.45f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+// ─── Joystick Widget ──────────────────────────────────────────────────────────
+
+@Composable
+private fun JoystickWidget(
+    onStickMove : (dx: Float, dy: Float) -> Unit,
+    onRelease   : () -> Unit,
+    size        : Float = 140f
+) {
+    val halfSize = size / 2f
+    var knobOffset by remember { mutableStateOf(Offset.Zero) }
+    val maxRadius  = halfSize * 0.65f
+
+    Box(
+        Modifier
+            .size(size.dp)
+            .clip(CircleShape)
+            .background(DroneBackground)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {},
+                    onDragEnd   = {
+                        knobOffset = Offset.Zero
+                        onRelease()
+                    },
+                    onDragCancel = {
+                        knobOffset = Offset.Zero
+                        onRelease()
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val newOffset = knobOffset + dragAmount
+                        val dist = sqrt(newOffset.x * newOffset.x + newOffset.y * newOffset.y)
+                        knobOffset = if (dist <= maxRadius) newOffset
+                        else newOffset / dist * maxRadius
+                        onStickMove(
+                            knobOffset.x / maxRadius,
+                            knobOffset.y / maxRadius
+                        )
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        // Háttér körök
+        Box(
+            Modifier
+                .size((size * 0.6f).dp)
+                .clip(CircleShape)
+                .background(DroneSurface)
+        )
+        // Keresztvonal
+        Divider(
+            Modifier
+                .width(size.dp)
+                .align(Alignment.Center),
+            color = DroneOnSurface.copy(0.1f), thickness = 1.dp
+        )
+        // Knob
+        Box(
+            Modifier
+                .offset(
+                    x = knobOffset.x.dp,
+                    y = knobOffset.y.dp
+                )
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(DroneSecondary)
+        )
+    }
+}
+
+// ─── Telemetria elem ──────────────────────────────────────────────────────────
+
+@Composable
+private fun TelemetryItem(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, tint = DroneAccent, modifier = Modifier.size(20.dp))
+        Text(value, fontWeight = FontWeight.Bold, color = DroneOnSurface, fontSize = 15.sp)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = DroneOnSurface.copy(0.55f))
+    }
+}
+
+// ─── ConfirmDeleteDialog (meglévő kódban is használt) ────────────────────────
+
+@Composable
+private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Törlés megerősítése") },
+        text  = { Text("Biztosan törlöd: $name?") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Törlés", color = DroneError) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Mégsem") } }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor   = DroneSecondary,
+    unfocusedBorderColor = DroneOnSurface.copy(alpha = 0.3f),
+    focusedLabelColor    = DroneSecondary,
+    cursorColor          = DroneSecondary
+)
 
 private val String.f: Float get() = toFloatOrNull() ?: 0f

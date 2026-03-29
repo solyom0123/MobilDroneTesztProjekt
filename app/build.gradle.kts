@@ -47,6 +47,12 @@ kotlin {
 }
 
 dependencies {
+    // DJI MSDK V5 – fő SDK
+    implementation("com.dji:dji-sdk-v5-aircraft:5.17.0")
+    compileOnly("com.dji:dji-sdk-v5-aircraft-provided:5.17.0")
+
+    // Hálózati modul (SDK regisztrációhoz kötelező)
+    runtimeOnly("com.dji:dji-sdk-v5-networkImp:5.14.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
