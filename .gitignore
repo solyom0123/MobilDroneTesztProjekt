@@ -1,0 +1,30 @@
+# Gradle files
+.gradle/
+build/
+app/build/
+*.main.kts
+
+# Kotlin / KSP generated
+build/generated/
+app/build/generated/
+
+# Android Studio / IntelliJ IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Local configuration (SDK paths, passwords)
+local.properties
+.bundle/
+
+# Log files
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Secrets (ha használsz ilyet később)
+.env
