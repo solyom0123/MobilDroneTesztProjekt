@@ -12,6 +12,7 @@ android {
 
 
     defaultConfig {
+        multiDexEnabled = true
         applicationId = "com.example.mobildrontesztprojekt"
         minSdk = 24
         targetSdk = 34
@@ -44,9 +45,16 @@ android {
     }
 
     packaging {
-        jniLibs {
-            useLegacyPackaging = true
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs.pickFirsts += listOf(
+            "lib/*/libconstants.so",
+            "lib/*/libdji_innertools.so",
+            "lib/*/libdji_midware.so",
+            "lib/*/libdji_mobile_sdk.so",
+            "lib/*/libdjivideo.so"
+        )
     }
 }
 
@@ -59,10 +67,10 @@ kotlin {
 dependencies {
     // DJI MSDK V5 – fő SDK
     implementation("com.dji:dji-sdk-v5-aircraft:5.17.0")
-    compileOnly("com.dji:dji-sdk-v5-aircraft-provided:5.17.0")
+    implementation("com.dji:dji-sdk-v5-aircraft-provided:5.17.0")
 
     // Hálózati modul (SDK regisztrációhoz kötelező)
-    runtimeOnly("com.dji:dji-sdk-v5-networkImp:5.14.0")
+    runtimeOnly("com.dji:dji-sdk-v5-networkImp:5.17.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)

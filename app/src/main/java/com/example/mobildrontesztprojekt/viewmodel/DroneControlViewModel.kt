@@ -103,8 +103,14 @@ class DroneControlViewModel(application: Application) : AndroidViewModel(applica
     fun saveAndRegisterKey(key: String) {
         if (key.isBlank()) return
         viewModelScope.launch {
-            db.appKeyDao().save(AppKey(djiAppKey = key.trim()))
-            registerSdk(key.trim())
+            // IO szálon mentsük az adatbázisba
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                db.appKeyDao().save(AppKey(djiAppKey = key.trim()))
+            }
+            // Visszatérés a FŐSZÁLRA az SDK init előtt
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                registerSdk(key.trim())
+            }
         }
     }
 

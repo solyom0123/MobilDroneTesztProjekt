@@ -8,6 +8,7 @@ pluginManagement {
             }
         }
         mavenCentral()
+        maven { url = uri("https://developer.dji.com/maven") }
         gradlePluginPortal()
     }
 }
